@@ -187,3 +187,52 @@ def test_real_duplicate_guard_end_to_end(tmp_path):
 
 def client_states(api, partner):
     return states(api, partner=partner)
+
+
+def fail_one(client, settings, sf):
+    submit(client, batch([rec(1)]))
+    guard = FakeGuard([TransientError("down")] * 20)
+    now = later()
+    for _ in range(settings.max_attempts):
+        now += timedelta(hours=2)
+        with sf() as s:
+            process_due(s, settings, guard, now)
+    assert states(client) == {"rec-1": "FAILED"}
+
+
+def requeue(client, **kw):
+    return client.post("/api/v1/sync/records/dev-9/rec-1/requeue", headers=auth(**kw))
+
+
+def test_requeue_needs_admin_role_and_only_works_on_failed(client, settings, sf):
+    fail_one(client, settings, sf)
+    assert requeue(client).status_code == 403  # plain officer
+    assert requeue(client, roles=["other"]).status_code == 403
+    assert requeue(client, roles=["sync-admin"], partner="WNRP").status_code == 404  # another partner's record
+    r = requeue(client, roles=["sync-admin"])
+    assert r.status_code == 200 and r.json()["state"] == "PENDING" and r.json()["attempts"] == 0
+    assert requeue(client, roles=["sync-admin"]).status_code == 409  # no longer FAILED
+    with sf() as s:
+        assert process_due(s, settings, FakeGuard(), later(5)) == {"SYNCED": 1}
+    assert client.post("/api/v1/sync/records/dev-9/nope/requeue", headers=auth(roles=["sync-admin"])).status_code == 404
+
+
+def test_retention_scrubs_only_finished_records(sf):
+    from rpcms_offline_sync.models import Record
+    from rpcms_offline_sync.service import scrub_old
+
+    s = make_settings(retention_days=30)
+    c = TestClient(create_app(s, sf))
+    submit(c, batch([rec(i) for i in range(1, 5)]))
+    with sf() as sess:
+        process_due(sess, s, FakeGuard([GuardResult("RECORDED", "E1"), GuardResult("CONFLICT", "E2", "R2"),
+                                       GuardResult("PERMANENT_ERROR", detail="x")]), later())
+        recs = {r.client_record_id: r for r in sess.query(Record).all()}  # rec-1 SYNCED, rec-2 CONFLICT, rec-3 FAILED, rec-4 PENDING
+        assert [recs[k].state for k in sorted(recs)] == ["SYNCED", "CONFLICT", "FAILED", "SYNCED"]
+        assert scrub_old(sess, s, datetime.now(timezone.utc) + timedelta(days=10)) == 0  # too recent
+        assert scrub_old(sess, s, datetime.now(timezone.utc) + timedelta(days=40)) == 2  # the two SYNCED
+        sess.expire_all()
+        scrubbed = {r.client_record_id: r.progres_id for r in sess.query(Record).all()}
+        assert [scrubbed[k] for k in sorted(scrubbed)] == ["SCRUBBED", "UGA-00423318", "UGA-00423318", "SCRUBBED"]
+        assert scrub_old(sess, s, datetime.now(timezone.utc) + timedelta(days=40)) == 0  # idempotent
+    assert scrub_old(sess, make_settings(), datetime.now(timezone.utc) + timedelta(days=999)) == 0  # disabled by default

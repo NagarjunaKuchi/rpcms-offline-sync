@@ -48,7 +48,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         with Session_() as s:
             yield s
 
-    def caller(authorization: str | None = Header(default=None)) -> tuple[str, str]:
+    def claims(authorization: str | None = Header(default=None)) -> dict:
         if not authorization or not authorization.lower().startswith("bearer "):
             raise SyncError(401, "Missing bearer token")
         try:
@@ -59,6 +59,15 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             raise SyncError(401, "Invalid token")
         if not c.get("partner_id"):
             raise SyncError(403, "Token has no partner_id")
+        return c
+
+    def caller(c: dict = Depends(claims)) -> tuple[str, str]:
+        return c["sub"], c["partner_id"]
+
+    def admin(c: dict = Depends(claims)) -> tuple[str, str]:
+        roles = c.get("roles") or []
+        if settings.admin_role not in (roles if isinstance(roles, list) else [roles]):
+            raise SyncError(403, "Admin role required")
         return c["sub"], c["partner_id"]
 
     @app.exception_handler(SyncError)
@@ -88,6 +97,10 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         if b is None:
             raise SyncError(404, "Batch not found")
         return {"clientBatchId": b.client_batch_id, "deviceId": b.device_id, "records": [record_view(r) for r in b.records]}
+
+    @app.post("/api/v1/sync/records/{device_id}/{client_record_id}/requeue")
+    def requeue(device_id: str, client_record_id: str, who=Depends(admin), s: Session = Depends(db)):
+        return record_view(service.requeue(s, who[1], device_id, client_record_id))
 
     @app.get("/api/v1/sync/summary")
     def summary(who=Depends(caller), s: Session = Depends(db)):

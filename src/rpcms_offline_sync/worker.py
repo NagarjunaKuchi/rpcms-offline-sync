@@ -8,14 +8,18 @@ import time
 from .api import make_session_factory
 from .config import Settings
 from .guard import HttpGuardClient
-from .service import process_due
+from .service import process_due, scrub_old
 
 log = logging.getLogger("rpcms.sync.worker")
 
 
 def run_once(settings: Settings, session_factory, guard) -> dict:
     with session_factory() as s:
-        return dict(process_due(s, settings, guard))
+        counts = dict(process_due(s, settings, guard))
+        scrubbed = scrub_old(s, settings)
+        if scrubbed:
+            counts["scrubbed"] = scrubbed
+        return counts
 
 
 def main() -> None:

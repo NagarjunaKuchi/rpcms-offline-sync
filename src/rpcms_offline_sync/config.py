@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # so every retry of a record carries the same key.
     idempotency_salt: str = Field(min_length=16)
 
+    # Role (a string in the JWT 'roles' claim) allowed to requeue FAILED records.
+    admin_role: str = "sync-admin"
+    # If set, SYNCED/REJECTED records older than this many days have their ProGres ID and auth
+    # reference scrubbed. None (default) keeps everything: choose a retention policy before real data.
+    retention_days: int | None = Field(default=None, ge=1)
+
     max_batch_records: int = 500
     max_clock_skew_seconds: int = 300  # capturedAt may be at most this far in the future
     max_attempts: int = 8

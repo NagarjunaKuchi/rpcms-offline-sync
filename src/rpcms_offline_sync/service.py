@@ -155,3 +155,37 @@ def summary(session: Session, partner: str) -> dict:
     rows = session.execute(select(Record.state).where(Record.partner_id == partner)).scalars().all()
     c = Counter(rows)
     return {s: c.get(s, 0) for s in (PENDING, SYNCED, CONFLICT, REJECTED, FAILED)} | {"total": len(rows)}
+
+
+SCRUBBED = "SCRUBBED"
+
+
+def requeue(session: Session, partner: str, device_id: str, client_record_id: str, now: datetime | None = None) -> Record:
+    """FAILED -> PENDING with a fresh retry budget. Only FAILED records can be requeued."""
+    rec = session.scalar(select(Record).where(Record.partner_id == partner, Record.device_id == device_id,
+                                              Record.client_record_id == client_record_id))
+    if rec is None:
+        raise SyncError(404, "Record not found")
+    if rec.state != FAILED:
+        raise SyncError(409, "Only FAILED records can be requeued", f"record is {rec.state}")
+    if rec.progres_id == SCRUBBED:
+        raise SyncError(409, "Record has been scrubbed and can no longer be sent")
+    rec.state, rec.attempts, rec.last_error = PENDING, 0, None
+    rec.next_attempt_at = now or datetime.now(timezone.utc)
+    session.commit()
+    return rec
+
+
+def scrub_old(session: Session, settings: Settings, now: datetime | None = None) -> int:
+    """Retention: blank the ProGres ID and auth reference of finished (SYNCED/REJECTED) records older than
+    settings.retention_days. The row stays so a late resend is still recognised as already known.
+    PENDING, FAILED and CONFLICT records are never scrubbed (they still need action)."""
+    if not settings.retention_days:
+        return 0
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=settings.retention_days)
+    rows = session.scalars(select(Record).where(Record.state.in_((SYNCED, REJECTED)), Record.updated_at < cutoff,
+                                                Record.progres_id != SCRUBBED)).all()
+    for r in rows:
+        r.progres_id, r.auth_txn_ref = SCRUBBED, None
+    session.commit()
+    return len(rows)

@@ -30,15 +30,19 @@ uvicorn --factory rpcms_offline_sync.api:create_app      # intake API
 rpcms-sync-worker                                         # forwarder (run one or more)
 pytest
 ```
-Other settings: `_MAX_BATCH_RECORDS`, `_MAX_CLOCK_SKEW_SECONDS`, `_MAX_ATTEMPTS`, `_BACKOFF_BASE_SECONDS`, `_BACKOFF_MAX_SECONDS`, `_WORKER_BATCH_SIZE`, `_WORKER_POLL_SECONDS`.
+Other settings: `_MAX_BATCH_RECORDS`, `_MAX_CLOCK_SKEW_SECONDS`, `_MAX_ATTEMPTS`, `_BACKOFF_BASE_SECONDS`, `_BACKOFF_MAX_SECONDS`, `_WORKER_BATCH_SIZE`, `_WORKER_POLL_SECONDS`, `_ADMIN_ROLE`, `_RETENTION_DAYS`.
+
+## Requeue and retention
+- `POST /api/v1/sync/records/{deviceId}/{clientRecordId}/requeue` moves a `FAILED` record back to `PENDING` with a fresh retry budget. It needs the officer JWT to carry the role in `RPCMS_SYNC_ADMIN_ROLE` (default `sync-admin`) in a `roles` claim, and only reaches the caller's own partner's records (others get 404). Non-`FAILED` records return 409. Scrubbed records cannot be requeued.
+- `RPCMS_SYNC_RETENTION_DAYS` is **off by default** (unset). When set, the worker blanks the ProGres ID (to `SCRUBBED`) and auth reference of `SYNCED`/`REJECTED` records older than that many days. The row stays so a late resend is still recognised. `PENDING`, `FAILED` and `CONFLICT` records are never scrubbed. The retention period itself is a programme policy decision that has not been made.
 
 ## Known limits (read before relying on this)
 - **No Redis.** The earlier architecture spec mentioned a Redis-backed queue; this uses a database table as the outbox (SQLite by default). That is durable and simple, but not what the spec said. A Redis or Celery front can be added without changing the API.
 - **The Guard decides the winner by arrival order, not capture time.** The worker sends oldest capture first, but a record captured earlier on another device that syncs later will still become the `CONFLICT` side. Whether capture time should win is a policy decision for the programme.
 - **AMP / NIMES are not involved.** Nothing here talks to them; their interfaces are unconfirmed.
-- `FAILED` records need a manual requeue; there is no endpoint for it yet.
+- Requeue is per record only; there is no bulk requeue, and the `roles` claim name/format is an assumption about the token issuer.
 - Several workers are safe (the Guard's idempotency makes a double send a replay) but there is no claim lock, so work may be duplicated.
-- **Raw ProGres IDs are stored in plaintext** in the sync table, with no retention or purge policy. Decide retention and encryption at rest before real data.
+- **Raw ProGres IDs are stored in plaintext** in the sync table, until you set `RPCMS_SYNC_RETENTION_DAYS` (off by default), and are not encrypted at rest. Decide retention and encryption before real data.
 - Auth is the officer JWT only: no device attestation, and `deviceId` is trusted as sent.
 - Tables are created at startup with no migrations; use Alembic and PostgreSQL before production. Not load-tested.
 - Verified end-to-end only against `rpcms-dedup` in-process, not over a network.
