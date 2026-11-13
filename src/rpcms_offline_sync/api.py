@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from . import service
+from . import crypto
 from .config import Settings
 from .models import Base, Batch, Record
 from .schemas import BatchIn
@@ -24,6 +25,10 @@ def _problem(status: int, title: str, detail: str = "") -> JSONResponse:
 
 
 def make_session_factory(settings: Settings):
+    crypto.configure(settings.data_keys)
+    if not settings.data_keys and not settings.allow_plaintext_storage:
+        raise RuntimeError("Set RPCMS_SYNC_DATA_KEYS (Fernet keys) to encrypt stored ProGres IDs, or set "
+                           "RPCMS_SYNC_ALLOW_PLAINTEXT_STORAGE=true to store them unencrypted (development only)")
     kwargs = {}
     if settings.database_url.startswith("sqlite") and ":memory:" in settings.database_url:
         kwargs = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}

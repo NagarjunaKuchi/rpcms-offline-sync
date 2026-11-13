@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "RPCMS offline sync: durable intake of field-captured assistance records and forwarding to the Duplicate Guard"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["fastapi>=0.110", "httpx>=0.27", "pydantic>=2.5", "pydantic-settings>=2.2", "pyjwt>=2.8", "sqlalchemy>=2.0", "uvicorn>=0.27", "alembic>=1.13"]
+dependencies = ["fastapi>=0.110", "httpx>=0.27", "pydantic>=2.5", "pydantic-settings>=2.2", "pyjwt>=2.8", "sqlalchemy>=2.0", "uvicorn>=0.27", "alembic>=1.13", "cryptography>=42"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
@@ -16,6 +16,7 @@ postgres = ["psycopg[binary]>=3.1"]
 
 [project.scripts]
 rpcms-sync-worker = "rpcms_offline_sync.worker:main"
+rpcms-sync-reencrypt = "rpcms_offline_sync.reencrypt:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rpcms_offline_sync"]

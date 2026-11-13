@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # so every retry of a record carries the same key.
     idempotency_salt: str = Field(min_length=16)
 
+    # Comma-separated Fernet keys for encrypting stored ProGres IDs and auth references. The first key encrypts,
+    # all decrypt (rotation). Without keys the service refuses to start unless allow_plaintext_storage is true.
+    data_keys: str | None = None
+    allow_plaintext_storage: bool = False
+
     # Role (a string in the JWT 'roles' claim) allowed to requeue FAILED records.
     admin_role: str = "sync-admin"
     # If set, SYNCED/REJECTED records older than this many days have their ProGres ID and auth

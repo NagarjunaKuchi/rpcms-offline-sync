@@ -189,3 +189,17 @@ def scrub_old(session: Session, settings: Settings, now: datetime | None = None)
         r.progres_id, r.auth_txn_ref = SCRUBBED, None
     session.commit()
     return len(rows)
+
+
+def reencrypt(session: Session) -> int:
+    """Re-encrypt every stored ProGres ID / auth reference with the primary key. Use after switching encryption on
+    (upgrades legacy plaintext rows) or after adding a new first key (rotation). Returns rows rewritten."""
+    from sqlalchemy.orm.attributes import flag_modified
+    n = 0
+    for rec in session.scalars(select(Record)):
+        flag_modified(rec, "progres_id")
+        if rec.auth_txn_ref is not None:
+            flag_modified(rec, "auth_txn_ref")
+        n += 1
+    session.commit()
+    return n

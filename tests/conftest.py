@@ -13,8 +13,12 @@ from rpcms_offline_sync.guard import GuardResult, TransientError
 KEY = "test-signing-key-0123456789-abcdef"
 
 
+DATA_KEY = "GXxS0E1kXn0aXr9hc3S2cRZTHjfw0sKXEMnrdVwQWmo="  # test-only Fernet key
+DATA_KEY2 = "BiP7q5sYhP5qZP9JZQw3b2oWQ0iO8nYb7Qd5hX1nN5A="  # test-only
+
+
 def make_settings(**kw):
-    base = dict(jwt_key=KEY, guard_api_key="guard-api-key-0123456", idempotency_salt="salt-0123456789-abcd",
+    base = dict(jwt_key=KEY, guard_api_key="guard-api-key-0123456", idempotency_salt="salt-0123456789-abcd", data_keys=DATA_KEY,
                 database_url=os.environ.get("RPCMS_TEST_DATABASE_URL", "sqlite:///:memory:"), create_tables="RPCMS_TEST_DATABASE_URL" not in os.environ)
     return Settings(**{**base, **kw})
 

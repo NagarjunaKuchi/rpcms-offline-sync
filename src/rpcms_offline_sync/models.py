@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from .crypto import EncryptedString
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Record states
@@ -42,14 +43,14 @@ class Record(Base):
     officer_id: Mapped[str] = mapped_column(String(64))
     device_id: Mapped[str] = mapped_column(String(128))
     client_record_id: Mapped[str] = mapped_column(String(128))
-    progres_id: Mapped[str] = mapped_column(String(64))
+    progres_id: Mapped[str] = mapped_column(EncryptedString(512))
     assistance_type: Mapped[str] = mapped_column(String(64))
     cycle: Mapped[str] = mapped_column(String(64))
     record_id: Mapped[str] = mapped_column(String(128))
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
-    auth_txn_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    auth_txn_ref: Mapped[str | None] = mapped_column(EncryptedString(512), nullable=True)
 
     state: Mapped[str] = mapped_column(String(16), default=PENDING)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
