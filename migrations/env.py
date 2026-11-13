@@ -1,3 +1,5 @@
+import os
+
 from alembic import context
 from sqlalchemy import create_engine
 
@@ -8,7 +10,9 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
-    return context.config.get_main_option("sqlalchemy.url") or Settings().database_url
+    # Only the database URL is needed, so migrations do not require the service's secrets to be set.
+    return (context.config.get_main_option("sqlalchemy.url") or os.environ.get("RPCMS_SYNC_DATABASE_URL")
+            or Settings.model_fields["database_url"].default)
 
 
 def run_migrations_online() -> None:
