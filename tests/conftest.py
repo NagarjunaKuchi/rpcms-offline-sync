@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -14,7 +15,7 @@ KEY = "test-signing-key-0123456789-abcdef"
 
 def make_settings(**kw):
     base = dict(jwt_key=KEY, guard_api_key="guard-api-key-0123456", idempotency_salt="salt-0123456789-abcd",
-                database_url="sqlite:///:memory:")
+                database_url=os.environ.get("RPCMS_TEST_DATABASE_URL", "sqlite:///:memory:"), create_tables="RPCMS_TEST_DATABASE_URL" not in os.environ)
     return Settings(**{**base, **kw})
 
 
@@ -70,3 +71,15 @@ class FakeGuard:
 
 
 __all__ = ["FakeGuard", "GuardResult", "TransientError"]
+
+
+@pytest.fixture(autouse=True)
+def _clean_external_db():
+    """With RPCMS_TEST_DATABASE_URL set (a Postgres already migrated with `alembic upgrade head`), empty the tables
+    between tests. In-memory SQLite (default) needs nothing."""
+    url = os.environ.get("RPCMS_TEST_DATABASE_URL")
+    if url:
+        from sqlalchemy import create_engine, text
+        with create_engine(url).begin() as c:
+            c.execute(text("TRUNCATE sync_record, sync_batch RESTART IDENTITY"))
+    yield

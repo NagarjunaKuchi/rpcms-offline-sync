@@ -28,7 +28,8 @@ def make_session_factory(settings: Settings):
     if settings.database_url.startswith("sqlite") and ":memory:" in settings.database_url:
         kwargs = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}
     engine = create_engine(settings.database_url, **kwargs)
-    Base.metadata.create_all(engine)  # no migrations yet: see README
+    if settings.create_tables:
+        Base.metadata.create_all(engine)  # dev/tests only; production uses Alembic (see README)
     return sessionmaker(engine, expire_on_commit=False)
 
 

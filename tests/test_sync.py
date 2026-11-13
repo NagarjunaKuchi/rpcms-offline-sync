@@ -56,7 +56,7 @@ def test_events_are_offline_oldest_first_normalised_with_stable_keys(client, set
     assert e["offline"] is True and e["progres_id"] == "UGA-1" and e["partner_id"] == "NHU" and e["officer_id"] == "off-1"
     assert len(e["idempotency_key"]) == 64 and g1.events[0]["idempotency_key"] != e["idempotency_key"]
     # same record from another partner gets a different key; keys never depend on retries
-    other = make_settings(database_url="sqlite:///:memory:")
+    other = make_settings(database_url="sqlite:///:memory:", create_tables=True)
     sf2 = make_session_factory(other)
     c2 = TestClient(create_app(other, sf2))
     submit(c2, batch([rec(1, pid="UGA-1", captured=ago(5)), rec(2, captured=ago(50))]), partner="WNRP")

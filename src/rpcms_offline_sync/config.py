@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     jwt_audience: str | None = None
 
     database_url: str = "sqlite:///./rpcms_offline_sync.db"
+    # True (default, dev/tests): create tables at startup. Set False in production and run `alembic upgrade head`.
+    create_tables: bool = True
 
     guard_url: str = "http://localhost:8000"
     guard_api_key: str = Field(min_length=16)

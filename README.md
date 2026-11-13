@@ -32,6 +32,15 @@ pytest
 ```
 Other settings: `_MAX_BATCH_RECORDS`, `_MAX_CLOCK_SKEW_SECONDS`, `_MAX_ATTEMPTS`, `_BACKOFF_BASE_SECONDS`, `_BACKOFF_MAX_SECONDS`, `_WORKER_BATCH_SIZE`, `_WORKER_POLL_SECONDS`, `_ADMIN_ROLE`, `_RETENTION_DAYS`.
 
+## Database migrations
+Schema changes are managed with Alembic (`migrations/`, initial revision `0001`). For anything beyond local development:
+```
+pip install -e ".[postgres]"
+export RPCMS_SYNC_DATABASE_URL=postgresql+psycopg://user:pass@host/db  RPCMS_SYNC_CREATE_TABLES=false
+alembic upgrade head
+```
+`RPCMS_SYNC_CREATE_TABLES` defaults to `true` (tables auto-created at startup, for development and tests); set it to `false` where Alembic owns the schema. A test checks that the migrations produce exactly the model schema. To run the suite against a migrated Postgres: `RPCMS_TEST_DATABASE_URL=... pytest` (it truncates the two tables between tests, so use a throwaway database).
+
 ## Requeue and retention
 - `POST /api/v1/sync/records/{deviceId}/{clientRecordId}/requeue` moves a `FAILED` record back to `PENDING` with a fresh retry budget. It needs the officer JWT to carry the role in `RPCMS_SYNC_ADMIN_ROLE` (default `sync-admin`) in a `roles` claim, and only reaches the caller's own partner's records (others get 404). Non-`FAILED` records return 409. Scrubbed records cannot be requeued.
 - `RPCMS_SYNC_RETENTION_DAYS` is **off by default** (unset). When set, the worker blanks the ProGres ID (to `SCRUBBED`) and auth reference of `SYNCED`/`REJECTED` records older than that many days. The row stays so a late resend is still recognised. `PENDING`, `FAILED` and `CONFLICT` records are never scrubbed. The retention period itself is a programme policy decision that has not been made.
@@ -44,5 +53,5 @@ Other settings: `_MAX_BATCH_RECORDS`, `_MAX_CLOCK_SKEW_SECONDS`, `_MAX_ATTEMPTS`
 - Several workers are safe (the Guard's idempotency makes a double send a replay) but there is no claim lock, so work may be duplicated.
 - **Raw ProGres IDs are stored in plaintext** in the sync table, until you set `RPCMS_SYNC_RETENTION_DAYS` (off by default), and are not encrypted at rest. Decide retention and encryption before real data.
 - Auth is the officer JWT only: no device attestation, and `deviceId` is trusted as sent.
-- Tables are created at startup with no migrations; use Alembic and PostgreSQL before production. Not load-tested.
+- Migrations exist for the current schema only (one initial revision). Verified on PostgreSQL 16 locally (upgrade, downgrade, full test suite) but not on other versions or under load; no concurrent-worker test on Postgres.
 - Verified end-to-end only against `rpcms-dedup` in-process, not over a network.
