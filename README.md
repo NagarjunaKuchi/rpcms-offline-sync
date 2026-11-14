@@ -55,6 +55,14 @@ The ProGres ID and the auth reference are stored encrypted (Fernet, via the `cry
 - `POST /api/v1/sync/records/{deviceId}/{clientRecordId}/requeue` moves a `FAILED` record back to `PENDING` with a fresh retry budget. It needs the officer JWT to carry the role in `RPCMS_SYNC_ADMIN_ROLE` (default `sync-admin`) in a `roles` claim, and only reaches the caller's own partner's records (others get 404). Non-`FAILED` records return 409. Scrubbed records cannot be requeued.
 - `RPCMS_SYNC_RETENTION_DAYS` is **off by default** (unset). When set, the worker blanks the ProGres ID (to `SCRUBBED`) and auth reference of `SYNCED`/`REJECTED` records older than that many days. The row stays so a late resend is still recognised. `PENDING`, `FAILED` and `CONFLICT` records are never scrubbed. The retention period itself is a programme policy decision that has not been made.
 
+## End-to-end smoke test (development)
+With the Duplicate Guard, this API and `rpcms-sync-worker` running on the same environment (all `RPCMS_*` variables set):
+
+```bash
+python scripts/e2e_smoke.py        # --sync / --guard to change the URLs
+```
+It signs a throwaway officer token with `RPCMS_SYNC_JWT_KEY` (claims `sub`, `exp`, `partner_id`), submits one test record, replays the batch, waits for the worker, and checks the record reached `SYNCED`. It fails (state `PENDING`) if the worker is not running. It writes test records into whichever databases you point it at, so do not aim it at real data.
+
 ## Known limits (read before relying on this)
 - **No Redis.** The earlier architecture spec mentioned a Redis-backed queue; this uses a database table as the outbox (SQLite by default). That is durable and simple, but not what the spec said. A Redis or Celery front can be added without changing the API.
 - **The Guard decides the winner by arrival order, not capture time.** The worker sends oldest capture first, but a record captured earlier on another device that syncs later will still become the `CONFLICT` side. Whether capture time should win is a policy decision for the programme.
